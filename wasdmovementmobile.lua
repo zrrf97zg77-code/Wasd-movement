@@ -1,4 +1,4 @@
--- Mobile WASD Movement Script with Auto-Jump Disabled
+-- Mobile WASD Movement Script with Camera-Relative Movement + Shiftlock
 -- Place this in StarterPlayerScripts as a LocalScript
 
 local Players = game:GetService("Players")
@@ -17,10 +17,9 @@ end)
 local function onCharacterAdded(character)
     local humanoid = character:WaitForChild("Humanoid")
     
-    -- Disable auto jump (mobile jump when moving forward)
+    -- Disable auto jump
     humanoid.AutoJumpEnabled = false
     
-    -- Also handle if it gets re-enabled
     humanoid:GetPropertyChangedSignal("AutoJumpEnabled"):Connect(function()
         if humanoid.AutoJumpEnabled then
             humanoid.AutoJumpEnabled = false
@@ -33,14 +32,65 @@ if player.Character then
 end
 player.CharacterAdded:Connect(onCharacterAdded)
 
--- Create the GUI
+-- ============================================================
+-- SHIFTLOCK SETUP
+-- ============================================================
+local shiftlockEnabled = false
+local originalOffset = nil
+
+-- Store the original camera offset on the humanoid
+local function setupHumanoidForShiftlock(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    -- Save original camera offset (usually Vector3.new(0,0,0) or a shoulder offset)
+    originalOffset = humanoid.CameraOffset
+    humanoid.CameraOffset = originalOffset
+end
+
+if player.Character then
+    setupHumanoidForShiftlock(player.Character)
+end
+player.CharacterAdded:Connect(setupHumanoidForShiftlock)
+
+-- Function to toggle shiftlock
+local function setShiftlock(enabled)
+    shiftlockEnabled = enabled
+    
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    if enabled then
+        -- Enable shiftlock: offset camera to the right shoulder and lock rotation to character
+        player.CameraMode = Enum.CameraMode.LockFirstPerson  -- fallback trick
+        -- Actually, we want classic shiftlock behavior:
+        -- The camera rotates around the character and the character follows camera
+        humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0) -- right shoulder offset
+        -- Set camera to follow the humanoid's rotation
+        camera.CameraSubject = humanoid
+        
+        -- We also need to make the character face the camera direction
+        -- This will be handled in the RenderStepped loop
+    else
+        -- Disable shiftlock: restore original offset
+        humanoid.CameraOffset = originalOffset or Vector3.new(0, 0, 0)
+    end
+end
+
+-- ============================================================
+-- GUI CREATION
+-- ============================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MobileWASD"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
--- Container frame
+-- WASD Container
 local container = Instance.new("Frame")
 container.Name = "Container"
 container.BackgroundTransparency = 1
@@ -57,7 +107,7 @@ local moveState = {
 }
 
 -- Function to create a button
-local function createButton(name, text, position, size)
+local function createButton(name, text, position, size, parent)
     local button = Instance.new("TextButton")
     button.Name = name
     button.Text = text
@@ -69,14 +119,12 @@ local function createButton(name, text, position, size)
     button.TextScaled = true
     button.Font = Enum.Font.GothamBold
     button.AutoButtonColor = true
-    button.Parent = container
+    button.Parent = parent or container
     
-    -- Add corner rounding
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = button
     
-    -- Add stroke
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(0, 0, 0)
     stroke.Thickness = 2
@@ -86,22 +134,29 @@ local function createButton(name, text, position, size)
     return button
 end
 
--- Button size
 local btnSize = UDim2.new(0, 80, 0, 80)
 
--- Create W button (top)
 local wButton = createButton("W", "W", UDim2.new(0, 100, 0, 0), btnSize)
-
--- Create A button (left)
 local aButton = createButton("A", "A", UDim2.new(0, 10, 0, 100), btnSize)
-
--- Create S button (bottom)
 local sButton = createButton("S", "S", UDim2.new(0, 100, 0, 100), btnSize)
-
--- Create D button (right)
 local dButton = createButton("D", "D", UDim2.new(0, 190, 0, 100), btnSize)
 
--- Function to update movement based on button states
+-- ============================================================
+-- SHIFTLOCK BUTTON
+-- ============================================================
+local shiftButton = createButton(
+    "Shiftlock", 
+    "🔒", 
+    UDim2.new(0, 100, 0, 200), 
+    UDim2.new(0, 80, 0, 60),
+    container
+)
+shiftButton.TextSize = 40
+shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+
+-- ============================================================
+-- MOVEMENT LOGIC
+-- ============================================================
 local function updateMovement()
     local character = player.Character
     if not character then return end
@@ -109,31 +164,43 @@ local function updateMovement()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     
-    -- Calculate move direction
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    
+    local camLook = cam.CFrame.LookVector
+    local camRight = cam.CFrame.RightVector
+    
+    local forward = Vector3.new(camLook.X, 0, camLook.Z)
+    local right = Vector3.new(camRight.X, 0, camRight.Z)
+    
+    if forward.Magnitude > 0 then forward = forward.Unit end
+    if right.Magnitude > 0 then right = right.Unit end
+    
     local moveVector = Vector3.new(0, 0, 0)
+    if moveState.W then moveVector = moveVector + forward end
+    if moveState.S then moveVector = moveVector - forward end
+    if moveState.A then moveVector = moveVector - right end
+    if moveState.D then moveVector = moveVector + right end
     
-    if moveState.W then
-        moveVector = moveVector + Vector3.new(0, 0, -1)
-    end
-    if moveState.S then
-        moveVector = moveVector + Vector3.new(0, 0, 1)
-    end
-    if moveState.A then
-        moveVector = moveVector + Vector3.new(-1, 0, 0)
-    end
-    if moveState.D then
-        moveVector = moveVector + Vector3.new(1, 0, 0)
-    end
-    
-    -- Apply movement
     if moveVector.Magnitude > 0 then
         humanoid:Move(moveVector.Unit, false)
     else
         humanoid:Move(Vector3.new(0, 0, 0), false)
     end
+    
+    -- Shiftlock: make character rotate to face camera direction
+    if shiftlockEnabled then
+        local lookFlat = Vector3.new(camLook.X, 0, camLook.Z)
+        if lookFlat.Magnitude > 0 then
+            local targetCFrame = CFrame.lookAt(character.HumanoidRootPart.Position, character.HumanoidRootPart.Position + lookFlat.Unit)
+            character.HumanoidRootPart.CFrame = CFrame.new(character.HumanoidRootPart.Position, character.HumanoidRootPart.Position + lookFlat.Unit)
+        end
+    end
 end
 
--- Button press handlers
+-- ============================================================
+-- BUTTON HANDLERS
+-- ============================================================
 local function setupButton(button, key)
     button.MouseButton1Down:Connect(function()
         moveState[key] = true
@@ -149,11 +216,6 @@ local function setupButton(button, key)
         moveState[key] = false
         button.BackgroundTransparency = 0.5
     end)
-    
-    -- Touch events for better mobile support
-    button.TouchLongPress:Connect(function()
-        -- Prevent long press context menu
-    end)
 end
 
 setupButton(wButton, "W")
@@ -161,10 +223,34 @@ setupButton(aButton, "A")
 setupButton(sButton, "S")
 setupButton(dButton, "D")
 
+-- Shiftlock toggle
+local shiftlockDebounce = false
+shiftButton.MouseButton1Down:Connect(function()
+    if shiftlockDebounce then return end
+    shiftlockDebounce = true
+    
+    shiftlockEnabled = not shiftlockEnabled
+    setShiftlock(shiftlockEnabled)
+    
+    -- Update visual
+    if shiftlockEnabled then
+        shiftButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+        shiftButton.Text = "🔓"
+    else
+        shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+        shiftButton.Text = "🔒"
+    end
+    
+    task.wait(0.2)
+    shiftlockDebounce = false
+end)
+
 -- Update movement every frame
 RunService.RenderStepped:Connect(updateMovement)
 
--- Also handle gamepad/desktop WASD if needed
+-- ============================================================
+-- DESKTOP KEYBOARD SUPPORT (for testing)
+-- ============================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
@@ -176,6 +262,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         moveState.S = true
     elseif input.KeyCode == Enum.KeyCode.D then
         moveState.D = true
+    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+        shiftlockEnabled = not shiftlockEnabled
+        setShiftlock(shiftlockEnabled)
+        if shiftlockEnabled then
+            shiftButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+            shiftButton.Text = "🔓"
+        else
+            shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+            shiftButton.Text = "🔒"
+        end
     end
 end)
 
@@ -191,7 +287,9 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Make it draggable (optional - makes the whole container draggable)
+-- ============================================================
+-- DRAGGABLE CONTAINER
+-- ============================================================
 local dragging = false
 local dragInput, dragStart, startPos
 
