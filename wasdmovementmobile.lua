@@ -80,16 +80,16 @@ screenGui.Parent = playerGui
 local leftContainer = Instance.new("Frame")
 leftContainer.Name = "LeftContainer"
 leftContainer.BackgroundTransparency = 1
-leftContainer.Size = UDim2.new(0, 100, 0, 200)
-leftContainer.Position = UDim2.new(0, 20, 1, -240)
+leftContainer.Size = UDim2.new(0, 100, 0, 150)
+leftContainer.Position = UDim2.new(0, 20, 1, -190)
 leftContainer.Parent = screenGui
 
 -- Right container (A, S, D side by side)
 local rightContainer = Instance.new("Frame")
 rightContainer.Name = "RightContainer"
 rightContainer.BackgroundTransparency = 1
-rightContainer.Size = UDim2.new(0, 280, 0, 100)
-rightContainer.Position = UDim2.new(1, -300, 0.5, -40)
+rightContainer.Size = UDim2.new(0, 200, 0, 60)
+rightContainer.Position = UDim2.new(1, -220, 0.5, -30)
 rightContainer.Parent = screenGui
 
 local moveState = {
@@ -126,26 +126,27 @@ local function createButton(name, text, position, size, parent)
     return button
 end
 
-local btnSize = UDim2.new(0, 80, 0, 80)
+-- Smaller button size
+local btnSize = UDim2.new(0, 55, 0, 55)
 
 -- Shiftlock button (smaller) - top of left container
 local shiftButton = createButton(
     "Shiftlock", 
     "🔒", 
     UDim2.new(0, 10, 0, 0), 
-    UDim2.new(0, 60, 0, 40),
+    UDim2.new(0, 50, 0, 35),
     leftContainer
 )
-shiftButton.TextSize = 24
+shiftButton.TextSize = 20
 shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 
 -- W button - below shiftlock
-local wButton = createButton("W", "W", UDim2.new(0, 0, 0, 60), btnSize, leftContainer)
+local wButton = createButton("W", "W", UDim2.new(0, 5, 0, 45), btnSize, leftContainer)
 
--- A, S, D side by side on the right (A left, S middle, D right)
+-- A, S, D side by side horizontally on the right
 local aButton = createButton("A", "A", UDim2.new(0, 0, 0, 0), btnSize, rightContainer)
-local sButton = createButton("S", "S", UDim2.new(0, 90, 0, 0), btnSize, rightContainer)
-local dButton = createButton("D", "D", UDim2.new(0, 180, 0, 0), btnSize, rightContainer)
+local sButton = createButton("S", "S", UDim2.new(0, 65, 0, 0), btnSize, rightContainer)
+local dButton = createButton("D", "D", UDim2.new(0, 130, 0, 0), btnSize, rightContainer)
 
 -- ============================================================
 -- MOVEMENT LOGIC
