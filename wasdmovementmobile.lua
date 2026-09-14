@@ -18,7 +18,6 @@ end)
 -- ============================================================
 local shiftlockEnabled = false
 
--- Store UserGameSettings for rotation type
 local UserSettings = UserSettings()
 local UserGameSettings = UserSettings.GameSettings
 
@@ -28,7 +27,6 @@ local UserGameSettings = UserSettings.GameSettings
 local function onCharacterAdded(character)
     local humanoid = character:WaitForChild("Humanoid")
     
-    -- Disable auto jump
     humanoid.AutoJumpEnabled = false
     humanoid:GetPropertyChangedSignal("AutoJumpEnabled"):Connect(function()
         if humanoid.AutoJumpEnabled then
@@ -36,7 +34,6 @@ local function onCharacterAdded(character)
         end
     end)
     
-    -- Re-apply shiftlock camera offset if it was enabled
     if shiftlockEnabled then
         humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0)
     end
@@ -60,22 +57,12 @@ local function setShiftlock(enabled)
     if not humanoid then return end
     
     if enabled then
-        -- Apply shoulder camera offset (1.75 is the standard Roblox value)
         humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0)
-        
-        -- Set rotation type to CameraRelative (movement follows camera)
         UserGameSettings.RotationType = Enum.RotationType.CameraRelative
-        
-        -- Lock mouse to center (harmless on mobile, needed for PC testing)
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
     else
-        -- Reset camera offset
         humanoid.CameraOffset = Vector3.new(0, 0, 0)
-        
-        -- Reset rotation type to default (MovementRelative)
         UserGameSettings.RotationType = Enum.RotationType.MovementRelative
-        
-        -- Unlock mouse
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
     end
 end
@@ -89,12 +76,21 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
+-- WASD Container (smaller now: 200x200)
 local container = Instance.new("Frame")
 container.Name = "Container"
 container.BackgroundTransparency = 1
-container.Size = UDim2.new(0, 300, 0, 300)
-container.Position = UDim2.new(0, 20, 1, -320)
+container.Size = UDim2.new(0, 200, 0, 200)
+container.Position = UDim2.new(0, 20, 1, -220)
 container.Parent = screenGui
+
+-- Separate container for S button (middle-right)
+local sContainer = Instance.new("Frame")
+sContainer.Name = "SContainer"
+sContainer.BackgroundTransparency = 1
+sContainer.Size = UDim2.new(0, 60, 0, 60)
+sContainer.Position = UDim2.new(1, -110, 0.5, -30)  -- right side, vertically centered
+sContainer.Parent = screenGui
 
 local moveState = {
     W = false,
@@ -130,26 +126,33 @@ local function createButton(name, text, position, size, parent)
     return button
 end
 
-local btnSize = UDim2.new(0, 80, 0, 80)
+-- Smaller button size (was 80, now 55)
+local btnSize = UDim2.new(0, 55, 0, 55)
 
-local wButton = createButton("W", "W", UDim2.new(0, 100, 0, 0), btnSize)
-local aButton = createButton("A", "A", UDim2.new(0, 10, 0, 100), btnSize)
-local sButton = createButton("S", "S", UDim2.new(0, 100, 0, 100), btnSize)
-local dButton = createButton("D", "D", UDim2.new(0, 190, 0, 100), btnSize)
+-- WASD layout in smaller container (200x200)
+-- W: top-center
+-- A: middle-left
+-- D: middle-right
+local wButton = createButton("W", "W", UDim2.new(0, 72, 0, 0), btnSize)
+local aButton = createButton("A", "A", UDim2.new(0, 0, 0, 72), btnSize)
+local dButton = createButton("D", "D", UDim2.new(0, 144, 0, 72), btnSize)
 
--- Shiftlock Button
+-- S button in its own container on middle-right
+local sButton = createButton("S", "S", UDim2.new(0, 0, 0, 0), UDim2.new(0, 60, 0, 60), sContainer)
+
+-- Shiftlock button (below the WASD pad)
 local shiftButton = createButton(
     "Shiftlock", 
     "🔒", 
-    UDim2.new(0, 100, 0, 200), 
-    UDim2.new(0, 80, 0, 60),
+    UDim2.new(0, 60, 0, 144), 
+    UDim2.new(0, 80, 0, 55),
     container
 )
-shiftButton.TextSize = 40
+shiftButton.TextSize = 32
 shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 
 -- ============================================================
--- MOVEMENT LOGIC (Camera-Relative, matches PC behavior)
+-- MOVEMENT LOGIC
 -- ============================================================
 local function updateMovement()
     local character = player.Character
@@ -229,7 +232,6 @@ shiftButton.MouseButton1Down:Connect(function()
     shiftlockDebounce = false
 end)
 
--- Update movement every frame
 RunService.RenderStepped:Connect(updateMovement)
 
 -- ============================================================
@@ -272,7 +274,7 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
 end)
 
 -- ============================================================
--- DRAGGABLE CONTAINER
+-- DRAGGABLE CONTAINER (WASD pad)
 -- ============================================================
 local dragging = false
 local dragInput, dragStart, startPos
