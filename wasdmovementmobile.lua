@@ -76,21 +76,21 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
--- WASD Container (smaller now: 200x200)
-local container = Instance.new("Frame")
-container.Name = "Container"
-container.BackgroundTransparency = 1
-container.Size = UDim2.new(0, 200, 0, 200)
-container.Position = UDim2.new(0, 20, 1, -220)
-container.Parent = screenGui
+-- Left container (W + Shiftlock)
+local leftContainer = Instance.new("Frame")
+leftContainer.Name = "LeftContainer"
+leftContainer.BackgroundTransparency = 1
+leftContainer.Size = UDim2.new(0, 100, 0, 200)
+leftContainer.Position = UDim2.new(0, 20, 1, -240)
+leftContainer.Parent = screenGui
 
--- Separate container for S button (middle-right)
-local sContainer = Instance.new("Frame")
-sContainer.Name = "SContainer"
-sContainer.BackgroundTransparency = 1
-sContainer.Size = UDim2.new(0, 60, 0, 60)
-sContainer.Position = UDim2.new(1, -110, 0.5, -30)  -- right side, vertically centered
-sContainer.Parent = screenGui
+-- Right container (A, S, D stacked vertically)
+local rightContainer = Instance.new("Frame")
+rightContainer.Name = "RightContainer"
+rightContainer.BackgroundTransparency = 1
+rightContainer.Size = UDim2.new(0, 100, 0, 300)
+rightContainer.Position = UDim2.new(1, -120, 0.5, -150)
+rightContainer.Parent = screenGui
 
 local moveState = {
     W = false,
@@ -111,7 +111,7 @@ local function createButton(name, text, position, size, parent)
     button.TextScaled = true
     button.Font = Enum.Font.GothamBold
     button.AutoButtonColor = true
-    button.Parent = parent or container
+    button.Parent = parent
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -126,30 +126,27 @@ local function createButton(name, text, position, size, parent)
     return button
 end
 
--- Smaller button size (was 80, now 55)
-local btnSize = UDim2.new(0, 55, 0, 55)
+-- Original button size (80x80)
+local btnSize = UDim2.new(0, 80, 0, 80)
 
--- WASD layout in smaller container (200x200)
--- W: top-center
--- A: middle-left
--- D: middle-right
-local wButton = createButton("W", "W", UDim2.new(0, 72, 0, 0), btnSize)
-local aButton = createButton("A", "A", UDim2.new(0, 0, 0, 72), btnSize)
-local dButton = createButton("D", "D", UDim2.new(0, 144, 0, 72), btnSize)
-
--- S button in its own container on middle-right
-local sButton = createButton("S", "S", UDim2.new(0, 0, 0, 0), UDim2.new(0, 60, 0, 60), sContainer)
-
--- Shiftlock button (below the WASD pad)
+-- Shiftlock button (smaller) - top of left container
 local shiftButton = createButton(
     "Shiftlock", 
     "🔒", 
-    UDim2.new(0, 60, 0, 144), 
-    UDim2.new(0, 80, 0, 55),
-    container
+    UDim2.new(0, 10, 0, 0), 
+    UDim2.new(0, 60, 0, 40),
+    leftContainer
 )
-shiftButton.TextSize = 32
+shiftButton.TextSize = 24
 shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+
+-- W button - below shiftlock
+local wButton = createButton("W", "W", UDim2.new(0, 0, 0, 60), btnSize, leftContainer)
+
+-- A, S, D stacked vertically on the right
+local aButton = createButton("A", "A", UDim2.new(0, 10, 0, 0), btnSize, rightContainer)
+local sButton = createButton("S", "S", UDim2.new(0, 10, 0, 100), btnSize, rightContainer)
+local dButton = createButton("D", "D", UDim2.new(0, 10, 0, 200), btnSize, rightContainer)
 
 -- ============================================================
 -- MOVEMENT LOGIC
@@ -274,39 +271,44 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
 end)
 
 -- ============================================================
--- DRAGGABLE CONTAINER (WASD pad)
+-- DRAGGABLE CONTAINERS
 -- ============================================================
-local dragging = false
-local dragInput, dragStart, startPos
+local function makeDraggable(frame)
+    local dragging = false
+    local dragInput, dragStart, startPos
+    
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, 
+                startPos.X.Offset + delta.X, 
+                startPos.Y.Scale, 
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
 
-container.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = container.Position
-        
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-container.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        container.Position = UDim2.new(
-            startPos.X.Scale, 
-            startPos.X.Offset + delta.X, 
-            startPos.Y.Scale, 
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
+makeDraggable(leftContainer)
+makeDraggable(rightContainer)
