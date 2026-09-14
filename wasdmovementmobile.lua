@@ -1,4 +1,4 @@
--- Mobile WASD Movement Script with Camera-Relative Movement + Shiftlock
+-- Mobile WASD Movement Script with Native-Style Shiftlock
 -- Place this in StarterPlayerScripts as a LocalScript
 
 local Players = game:GetService("Players")
@@ -13,18 +13,33 @@ pcall(function()
     player.DevEnableMouseLock = false
 end)
 
--- Wait for character
+-- ============================================================
+-- SHIFTLOCK STATE
+-- ============================================================
+local shiftlockEnabled = false
+
+-- Store UserGameSettings for rotation type
+local UserSettings = UserSettings()
+local UserGameSettings = UserSettings.GameSettings
+
+-- ============================================================
+-- CHARACTER SETUP
+-- ============================================================
 local function onCharacterAdded(character)
     local humanoid = character:WaitForChild("Humanoid")
     
     -- Disable auto jump
     humanoid.AutoJumpEnabled = false
-    
     humanoid:GetPropertyChangedSignal("AutoJumpEnabled"):Connect(function()
         if humanoid.AutoJumpEnabled then
             humanoid.AutoJumpEnabled = false
         end
     end)
+    
+    -- Re-apply shiftlock camera offset if it was enabled
+    if shiftlockEnabled then
+        humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0)
+    end
 end
 
 if player.Character then
@@ -33,25 +48,8 @@ end
 player.CharacterAdded:Connect(onCharacterAdded)
 
 -- ============================================================
--- SHIFTLOCK SETUP
+-- SHIFTLOCK FUNCTIONS
 -- ============================================================
-local shiftlockEnabled = false
-local originalOffset = nil
-
--- Store the original camera offset on the humanoid
-local function setupHumanoidForShiftlock(character)
-    local humanoid = character:WaitForChild("Humanoid")
-    -- Save original camera offset (usually Vector3.new(0,0,0) or a shoulder offset)
-    originalOffset = humanoid.CameraOffset
-    humanoid.CameraOffset = originalOffset
-end
-
-if player.Character then
-    setupHumanoidForShiftlock(player.Character)
-end
-player.CharacterAdded:Connect(setupHumanoidForShiftlock)
-
--- Function to toggle shiftlock
 local function setShiftlock(enabled)
     shiftlockEnabled = enabled
     
@@ -61,23 +59,24 @@ local function setShiftlock(enabled)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-    
     if enabled then
-        -- Enable shiftlock: offset camera to the right shoulder and lock rotation to character
-        player.CameraMode = Enum.CameraMode.LockFirstPerson  -- fallback trick
-        -- Actually, we want classic shiftlock behavior:
-        -- The camera rotates around the character and the character follows camera
-        humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0) -- right shoulder offset
-        -- Set camera to follow the humanoid's rotation
-        camera.CameraSubject = humanoid
+        -- Apply shoulder camera offset (1.75 is the standard Roblox value)
+        humanoid.CameraOffset = Vector3.new(1.75, 0.5, 0)
         
-        -- We also need to make the character face the camera direction
-        -- This will be handled in the RenderStepped loop
+        -- Set rotation type to CameraRelative (movement follows camera)
+        UserGameSettings.RotationType = Enum.RotationType.CameraRelative
+        
+        -- Lock mouse to center (harmless on mobile, needed for PC testing)
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
     else
-        -- Disable shiftlock: restore original offset
-        humanoid.CameraOffset = originalOffset or Vector3.new(0, 0, 0)
+        -- Reset camera offset
+        humanoid.CameraOffset = Vector3.new(0, 0, 0)
+        
+        -- Reset rotation type to default (MovementRelative)
+        UserGameSettings.RotationType = Enum.RotationType.MovementRelative
+        
+        -- Unlock mouse
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
     end
 end
 
@@ -90,7 +89,6 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
 
--- WASD Container
 local container = Instance.new("Frame")
 container.Name = "Container"
 container.BackgroundTransparency = 1
@@ -98,7 +96,6 @@ container.Size = UDim2.new(0, 300, 0, 300)
 container.Position = UDim2.new(0, 20, 1, -320)
 container.Parent = screenGui
 
--- Movement state
 local moveState = {
     W = false,
     A = false,
@@ -106,7 +103,6 @@ local moveState = {
     D = false,
 }
 
--- Function to create a button
 local function createButton(name, text, position, size, parent)
     local button = Instance.new("TextButton")
     button.Name = name
@@ -141,9 +137,7 @@ local aButton = createButton("A", "A", UDim2.new(0, 10, 0, 100), btnSize)
 local sButton = createButton("S", "S", UDim2.new(0, 100, 0, 100), btnSize)
 local dButton = createButton("D", "D", UDim2.new(0, 190, 0, 100), btnSize)
 
--- ============================================================
--- SHIFTLOCK BUTTON
--- ============================================================
+-- Shiftlock Button
 local shiftButton = createButton(
     "Shiftlock", 
     "🔒", 
@@ -155,7 +149,7 @@ shiftButton.TextSize = 40
 shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 
 -- ============================================================
--- MOVEMENT LOGIC
+-- MOVEMENT LOGIC (Camera-Relative, matches PC behavior)
 -- ============================================================
 local function updateMovement()
     local character = player.Character
@@ -186,15 +180,6 @@ local function updateMovement()
         humanoid:Move(moveVector.Unit, false)
     else
         humanoid:Move(Vector3.new(0, 0, 0), false)
-    end
-    
-    -- Shiftlock: make character rotate to face camera direction
-    if shiftlockEnabled then
-        local lookFlat = Vector3.new(camLook.X, 0, camLook.Z)
-        if lookFlat.Magnitude > 0 then
-            local targetCFrame = CFrame.lookAt(character.HumanoidRootPart.Position, character.HumanoidRootPart.Position + lookFlat.Unit)
-            character.HumanoidRootPart.CFrame = CFrame.new(character.HumanoidRootPart.Position, character.HumanoidRootPart.Position + lookFlat.Unit)
-        end
     end
 end
 
@@ -232,7 +217,6 @@ shiftButton.MouseButton1Down:Connect(function()
     shiftlockEnabled = not shiftlockEnabled
     setShiftlock(shiftlockEnabled)
     
-    -- Update visual
     if shiftlockEnabled then
         shiftButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
         shiftButton.Text = "🔓"
@@ -249,7 +233,7 @@ end)
 RunService.RenderStepped:Connect(updateMovement)
 
 -- ============================================================
--- DESKTOP KEYBOARD SUPPORT (for testing)
+-- DESKTOP KEYBOARD SUPPORT
 -- ============================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
