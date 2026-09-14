@@ -84,12 +84,12 @@ leftContainer.Size = UDim2.new(0, 100, 0, 200)
 leftContainer.Position = UDim2.new(0, 20, 1, -240)
 leftContainer.Parent = screenGui
 
--- Right container (A, S, D stacked vertically)
+-- Right container (A, S, D side by side)
 local rightContainer = Instance.new("Frame")
 rightContainer.Name = "RightContainer"
 rightContainer.BackgroundTransparency = 1
-rightContainer.Size = UDim2.new(0, 100, 0, 300)
-rightContainer.Position = UDim2.new(1, -120, 0.5, -150)
+rightContainer.Size = UDim2.new(0, 280, 0, 100)
+rightContainer.Position = UDim2.new(1, -300, 0.5, -40)
 rightContainer.Parent = screenGui
 
 local moveState = {
@@ -126,7 +126,6 @@ local function createButton(name, text, position, size, parent)
     return button
 end
 
--- Original button size (80x80)
 local btnSize = UDim2.new(0, 80, 0, 80)
 
 -- Shiftlock button (smaller) - top of left container
@@ -143,10 +142,10 @@ shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 -- W button - below shiftlock
 local wButton = createButton("W", "W", UDim2.new(0, 0, 0, 60), btnSize, leftContainer)
 
--- A, S, D stacked vertically on the right
-local aButton = createButton("A", "A", UDim2.new(0, 10, 0, 0), btnSize, rightContainer)
-local sButton = createButton("S", "S", UDim2.new(0, 10, 0, 100), btnSize, rightContainer)
-local dButton = createButton("D", "D", UDim2.new(0, 10, 0, 200), btnSize, rightContainer)
+-- A, S, D side by side on the right (A left, S middle, D right)
+local aButton = createButton("A", "A", UDim2.new(0, 0, 0, 0), btnSize, rightContainer)
+local sButton = createButton("S", "S", UDim2.new(0, 90, 0, 0), btnSize, rightContainer)
+local dButton = createButton("D", "D", UDim2.new(0, 180, 0, 0), btnSize, rightContainer)
 
 -- ============================================================
 -- MOVEMENT LOGIC
