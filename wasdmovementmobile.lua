@@ -84,7 +84,7 @@ leftContainer.Size = UDim2.new(0, 220, 0, 180)
 leftContainer.Position = UDim2.new(0, 20, 1, -220)
 leftContainer.Parent = screenGui
 
--- Right container (DS)
+-- Right container (SD)
 local rightContainer = Instance.new("Frame")
 rightContainer.Name = "RightContainer"
 rightContainer.BackgroundTransparency = 1
@@ -144,9 +144,9 @@ shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 local wButton = createButton("W", "W", UDim2.new(0, 10, 0, 55), btnSize, leftContainer)
 local aButton = createButton("A", "A", UDim2.new(0, 110, 0, 55), btnSize, leftContainer)
 
--- S and D side by side but as DS on the right
-local dButton = createButton("D", "D", UDim2.new(0, 10, 0, 0), btnSize, rightContainer)
-local sButton = createButton("S", "S", UDim2.new(0, 110, 0, 0), btnSize, rightContainer)
+-- S and D side by side as SD on the right
+local sButton = createButton("S", "S", UDim2.new(0, 10, 0, 0), btnSize, rightContainer)
+local dButton = createButton("D", "D", UDim2.new(0, 110, 0, 0), btnSize, rightContainer)
 
 -- ============================================================
 -- MOVEMENT LOGIC
