@@ -1,4 +1,4 @@
--- Mobile WASD Movement Script with Native-Style Shiftlock
+-- Mobile WASD Movement Script with Native-Style Shiftlock + Control Toggle
 -- Place this in StarterPlayerScripts as a LocalScript
 
 local Players = game:GetService("Players")
@@ -14,12 +14,24 @@ pcall(function()
 end)
 
 -- ============================================================
+-- CONTROL MODE TOGGLE
+-- ============================================================
+local customControlsEnabled = true  -- true = WASD, false = default Roblox mobile
+
+-- ============================================================
 -- SHIFTLOCK STATE
 -- ============================================================
 local shiftlockEnabled = false
 
 local UserSettings = UserSettings()
 local UserGameSettings = UserSettings.GameSettings
+
+-- ============================================================
+-- GET PLAYER CONTROLS MODULE (to toggle default mobile controls)
+-- ============================================================
+local playerScripts = player:WaitForChild("PlayerScripts")
+local playerModule = require(playerScripts:WaitForChild("PlayerModule"))
+local controls = playerModule:GetControls()
 
 -- ============================================================
 -- CHARACTER SETUP
@@ -126,10 +138,9 @@ local function createButton(name, text, position, size, parent)
     return button
 end
 
--- Bigger button size
 local btnSize = UDim2.new(0, 90, 0, 90)
 
--- Shiftlock button - top of left container
+-- Shiftlock button
 local shiftButton = createButton(
     "Shiftlock", 
     "🔒", 
@@ -140,18 +151,45 @@ local shiftButton = createButton(
 shiftButton.TextSize = 24
 shiftButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 
--- W and A side by side (WA) on the left, below shiftlock
+-- W and A side by side
 local wButton = createButton("W", "W", UDim2.new(0, 10, 0, 55), btnSize, leftContainer)
 local aButton = createButton("A", "A", UDim2.new(0, 110, 0, 55), btnSize, leftContainer)
 
--- S and D side by side as SD on the right
+-- S and D side by side (SD)
 local sButton = createButton("S", "S", UDim2.new(0, 10, 0, 0), btnSize, rightContainer)
 local dButton = createButton("D", "D", UDim2.new(0, 110, 0, 0), btnSize, rightContainer)
+
+-- ============================================================
+-- TOGGLE BUTTON (small, top-center of screen)
+-- ============================================================
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ControlToggle"
+toggleButton.Text = "WASD"
+toggleButton.Size = UDim2.new(0, 80, 0, 35)
+toggleButton.Position = UDim2.new(0.5, -40, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(80, 180, 255)
+toggleButton.BackgroundTransparency = 0.2
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextScaled = true
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.Parent = screenGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 6)
+toggleCorner.Parent = toggleButton
+
+local toggleStroke = Instance.new("UIStroke")
+toggleStroke.Color = Color3.fromRGB(0, 0, 0)
+toggleStroke.Thickness = 2
+toggleStroke.Transparency = 0.4
+toggleStroke.Parent = toggleButton
 
 -- ============================================================
 -- MOVEMENT LOGIC
 -- ============================================================
 local function updateMovement()
+    if not customControlsEnabled then return end
+    
     local character = player.Character
     if not character then return end
     
@@ -228,6 +266,59 @@ shiftButton.MouseButton1Down:Connect(function()
     task.wait(0.2)
     shiftlockDebounce = false
 end)
+
+-- ============================================================
+-- TOGGLE BUTTON LOGIC
+-- ============================================================
+local toggleDebounce = false
+toggleButton.MouseButton1Down:Connect(function()
+    if toggleDebounce then return end
+    toggleDebounce = true
+    
+    customControlsEnabled = not customControlsEnabled
+    
+    if customControlsEnabled then
+        -- Show custom WASD, hide default mobile controls
+        leftContainer.Visible = true
+        rightContainer.Visible = true
+        pcall(function() controls:Disable() end)
+        toggleButton.Text = "WASD"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(80, 180, 255)
+        -- Reset movement state so character doesn't keep moving
+        moveState.W = false
+        moveState.A = false
+        moveState.S = false
+        moveState.D = false
+    else
+        -- Hide custom WASD, show default mobile controls
+        leftContainer.Visible = false
+        rightContainer.Visible = false
+        pcall(function() controls:Enable() end)
+        toggleButton.Text = "MOBILE"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(255, 140, 80)
+        -- Reset movement state
+        moveState.W = false
+        moveState.A = false
+        moveState.S = false
+        moveState.D = false
+        -- Make sure character stops moving
+        local character = player.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:Move(Vector3.new(0, 0, 0), false)
+            end
+        end
+    end
+    
+    task.wait(0.2)
+    toggleDebounce = false
+end)
+
+-- ============================================================
+-- START: Disable default controls since WASD is on by default
+-- ============================================================
+pcall(function() controls:Disable() end)
 
 RunService.RenderStepped:Connect(updateMovement)
 
@@ -312,3 +403,4 @@ end
 
 makeDraggable(leftContainer)
 makeDraggable(rightContainer)
+makeDraggable(toggleButton)
