@@ -5,6 +5,41 @@ local cam = workspace.CurrentCamera
 
 if _G.WASDGui then pcall(function() _G.WASDGui:Destroy() end) end
 
+-- ============================================================
+-- DISABLE AUTO-JUMP
+-- The TouchJump control lives in PlayerGui.TouchGui, created at runtime.
+-- We scan for it repeatedly and flip its auto-jump flag.
+-- ============================================================
+task.spawn(function()
+    while true do
+        pcall(function()
+            local pg = plr:FindFirstChild("PlayerGui")
+            if pg then
+                local tg = pg:FindFirstChild("TouchGui")
+                if tg then
+                    for _, child in ipairs(tg:GetDescendants()) do
+                        -- TouchJump has autoJumpEnabled property
+                        pcall(function()
+                            if child.Name == "TouchJump" then
+                                if child.AutoJumpEnabled ~= nil then
+                                    child.AutoJumpEnabled = false
+                                end
+                                if child.autoJumpEnabled ~= nil then
+                                    child.autoJumpEnabled = false
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+-- ============================================================
+-- GUI
+-- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "WASDMobile"
 gui.ResetOnSpawn = false
@@ -30,13 +65,11 @@ local function mkbtn(txt, size, pos, bg)
     return b
 end
 
--- ===== Toggle button (back in top-left) =====
 local toggleBtn = mkbtn("WASD: ON", UDim2.new(0,110,0,40), UDim2.new(0,12,0,12), Color3.fromRGB(0,120,200))
 toggleBtn.TextSize = 15
 
--- ===== Shiftlock button =====
+-- Shiftlock
 local shiftBtn = Instance.new("ImageButton")
-shiftBtn.Name = "ShiftLockButton"
 shiftBtn.Size = UDim2.fromOffset(55, 55)
 shiftBtn.Position = UDim2.new(1, -75, 0, 12)
 shiftBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -44,34 +77,25 @@ shiftBtn.BackgroundTransparency = 0.15
 shiftBtn.BorderSizePixel = 0
 shiftBtn.AutoButtonColor = false
 shiftBtn.Parent = gui
-
-local shiftCorner = Instance.new("UICorner")
-shiftCorner.CornerRadius = UDim.new(1, 0)
-shiftCorner.Parent = shiftBtn
-
-local shiftStroke = Instance.new("UIStroke")
-shiftStroke.Thickness = 2
-shiftStroke.Transparency = 0.25
-shiftStroke.Parent = shiftBtn
-
+local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1,0); sc.Parent = shiftBtn
+local ss = Instance.new("UIStroke"); ss.Thickness = 2; ss.Transparency = 0.25; ss.Parent = shiftBtn
 local shiftIcon = Instance.new("TextLabel")
-shiftIcon.Size = UDim2.fromScale(1, 1)
+shiftIcon.Size = UDim2.fromScale(1,1)
 shiftIcon.BackgroundTransparency = 1
 shiftIcon.Text = "🔒"
 shiftIcon.TextScaled = true
 shiftIcon.Font = Enum.Font.GothamBold
-shiftIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+shiftIcon.TextColor3 = Color3.fromRGB(255,255,255)
 shiftIcon.Parent = shiftBtn
 
--- ===== WASD buttons =====
+-- WASD
 local W = mkbtn("W", UDim2.new(0,70,0,70), UDim2.new(0, 20,  1, -170))
 local A = mkbtn("A", UDim2.new(0,70,0,70), UDim2.new(0, 100, 1, -170))
 local S = mkbtn("S", UDim2.new(0,70,0,70), UDim2.new(1, -170, 1, -170))
 local D = mkbtn("D", UDim2.new(0,70,0,70), UDim2.new(1, -90,  1, -170))
 
--- ===== Jump button =====
+-- Jump
 local jumpBtn = Instance.new("ImageButton")
-jumpBtn.Name = "JumpButton"
 jumpBtn.Size = UDim2.fromOffset(70, 70)
 jumpBtn.Position = UDim2.new(1, -90, 1, -260)
 jumpBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
@@ -79,23 +103,15 @@ jumpBtn.BackgroundTransparency = 0.15
 jumpBtn.BorderSizePixel = 0
 jumpBtn.AutoButtonColor = false
 jumpBtn.Parent = gui
-
-local jumpCorner = Instance.new("UICorner")
-jumpCorner.CornerRadius = UDim.new(1, 0)
-jumpCorner.Parent = jumpBtn
-
-local jumpStroke = Instance.new("UIStroke")
-jumpStroke.Thickness = 2
-jumpStroke.Transparency = 0.25
-jumpStroke.Parent = jumpBtn
-
+local jc = Instance.new("UICorner"); jc.CornerRadius = UDim.new(1,0); jc.Parent = jumpBtn
+local js = Instance.new("UIStroke"); js.Thickness = 2; js.Transparency = 0.25; js.Parent = jumpBtn
 local jumpIcon = Instance.new("TextLabel")
-jumpIcon.Size = UDim2.fromScale(1, 1)
+jumpIcon.Size = UDim2.fromScale(1,1)
 jumpIcon.BackgroundTransparency = 1
 jumpIcon.Text = "⬆"
 jumpIcon.TextScaled = true
 jumpIcon.Font = Enum.Font.GothamBold
-jumpIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+jumpIcon.TextColor3 = Color3.fromRGB(255,255,255)
 jumpIcon.Parent = jumpBtn
 
 local keys = {W=false, A=false, S=false, D=false}
@@ -104,7 +120,6 @@ local wasdOn = true
 
 local humanoid
 local rootPart
-
 local SHIFT_OFFSET = Vector3.new(1.75, 0, 0)
 local NORMAL_OFFSET = Vector3.new(0, 0, 0)
 
@@ -118,7 +133,6 @@ end
 if plr.Character then setupCharacter(plr.Character) end
 plr.CharacterAdded:Connect(setupCharacter)
 
--- ===== WASD binding =====
 local function bind(btn, key)
     btn.MouseButton1Down:Connect(function()
         keys[key] = true
@@ -148,7 +162,7 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
--- ===== Jump button binding =====
+-- ===== JUMP — clean, no state check =====
 local function doJump()
     if humanoid and humanoid.Health > 0 then
         humanoid.Jump = true
@@ -171,7 +185,6 @@ jumpBtn.InputBegan:Connect(function(i)
     end
 end)
 
--- ===== Toggle WASD =====
 toggleBtn.Activated:Connect(function()
     wasdOn = not wasdOn
     W.Visible = wasdOn
@@ -189,19 +202,18 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- ===== Shiftlock toggle =====
 local function setShiftLock(enabled)
     shiftLock = enabled
     if not humanoid then return end
     if enabled then
         humanoid.AutoRotate = false
-        shiftBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        shiftIcon.TextColor3 = Color3.fromRGB(0, 0, 0)
+        shiftBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        shiftIcon.TextColor3 = Color3.fromRGB(0,0,0)
         shiftIcon.Text = "🔓"
     else
         humanoid.AutoRotate = true
-        shiftBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-        shiftIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+        shiftBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+        shiftIcon.TextColor3 = Color3.fromRGB(255,255,255)
         shiftIcon.Text = "🔒"
     end
 end
@@ -210,7 +222,6 @@ shiftBtn.Activated:Connect(function()
     setShiftLock(not shiftLock)
 end)
 
--- ===== Main loop =====
 RS.RenderStepped:Connect(function()
     if not humanoid or not rootPart then return end
 
@@ -249,7 +260,7 @@ RS.RenderStepped:Connect(function()
     end
 end)
 
--- ===== Hide default mobile controls =====
+-- Hide default mobile controls
 local lastState = nil
 task.spawn(function()
     while true do
