@@ -30,10 +30,11 @@ local function mkbtn(txt, size, pos, bg)
     return b
 end
 
+-- ===== Toggle button (back in top-left) =====
 local toggleBtn = mkbtn("WASD: ON", UDim2.new(0,110,0,40), UDim2.new(0,12,0,12), Color3.fromRGB(0,120,200))
 toggleBtn.TextSize = 15
 
--- Shiftlock button (round, styled like the script you sent)
+-- ===== Shiftlock button =====
 local shiftBtn = Instance.new("ImageButton")
 shiftBtn.Name = "ShiftLockButton"
 shiftBtn.Size = UDim2.fromOffset(55, 55)
@@ -62,10 +63,40 @@ shiftIcon.Font = Enum.Font.GothamBold
 shiftIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
 shiftIcon.Parent = shiftBtn
 
+-- ===== WASD buttons =====
 local W = mkbtn("W", UDim2.new(0,70,0,70), UDim2.new(0, 20,  1, -170))
 local A = mkbtn("A", UDim2.new(0,70,0,70), UDim2.new(0, 100, 1, -170))
 local S = mkbtn("S", UDim2.new(0,70,0,70), UDim2.new(1, -170, 1, -170))
 local D = mkbtn("D", UDim2.new(0,70,0,70), UDim2.new(1, -90,  1, -170))
+
+-- ===== Jump button =====
+local jumpBtn = Instance.new("ImageButton")
+jumpBtn.Name = "JumpButton"
+jumpBtn.Size = UDim2.fromOffset(70, 70)
+jumpBtn.Position = UDim2.new(1, -90, 1, -260)
+jumpBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+jumpBtn.BackgroundTransparency = 0.15
+jumpBtn.BorderSizePixel = 0
+jumpBtn.AutoButtonColor = false
+jumpBtn.Parent = gui
+
+local jumpCorner = Instance.new("UICorner")
+jumpCorner.CornerRadius = UDim.new(1, 0)
+jumpCorner.Parent = jumpBtn
+
+local jumpStroke = Instance.new("UIStroke")
+jumpStroke.Thickness = 2
+jumpStroke.Transparency = 0.25
+jumpStroke.Parent = jumpBtn
+
+local jumpIcon = Instance.new("TextLabel")
+jumpIcon.Size = UDim2.fromScale(1, 1)
+jumpIcon.BackgroundTransparency = 1
+jumpIcon.Text = "⬆"
+jumpIcon.TextScaled = true
+jumpIcon.Font = Enum.Font.GothamBold
+jumpIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+jumpIcon.Parent = jumpBtn
 
 local keys = {W=false, A=false, S=false, D=false}
 local shiftLock = false
@@ -77,7 +108,6 @@ local rootPart
 local SHIFT_OFFSET = Vector3.new(1.75, 0, 0)
 local NORMAL_OFFSET = Vector3.new(0, 0, 0)
 
--- Character setup
 local function setupCharacter(character)
     humanoid = character:WaitForChild("Humanoid")
     rootPart = character:WaitForChild("HumanoidRootPart")
@@ -85,12 +115,10 @@ local function setupCharacter(character)
     humanoid.AutoRotate = true
 end
 
-if plr.Character then
-    setupCharacter(plr.Character)
-end
+if plr.Character then setupCharacter(plr.Character) end
 plr.CharacterAdded:Connect(setupCharacter)
 
--- WASD binding
+-- ===== WASD binding =====
 local function bind(btn, key)
     btn.MouseButton1Down:Connect(function()
         keys[key] = true
@@ -120,13 +148,37 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
--- Toggle WASD
+-- ===== Jump button binding =====
+local function doJump()
+    if humanoid and humanoid.Health > 0 then
+        humanoid.Jump = true
+    end
+    jumpBtn.BackgroundColor3 = Color3.fromRGB(0,120,200)
+end
+local function endJump()
+    jumpBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+end
+
+jumpBtn.MouseButton1Down:Connect(doJump)
+jumpBtn.MouseButton1Up:Connect(endJump)
+jumpBtn.MouseLeave:Connect(endJump)
+jumpBtn.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch then
+        doJump()
+        i.Changed:Connect(function()
+            if i.UserInputState == Enum.UserInputState.End then endJump() end
+        end)
+    end
+end)
+
+-- ===== Toggle WASD =====
 toggleBtn.Activated:Connect(function()
     wasdOn = not wasdOn
     W.Visible = wasdOn
     A.Visible = wasdOn
     S.Visible = wasdOn
     D.Visible = wasdOn
+    jumpBtn.Visible = wasdOn
     if wasdOn then
         toggleBtn.Text = "WASD: ON"
         toggleBtn.BackgroundColor3 = Color3.fromRGB(0,120,200)
@@ -137,12 +189,10 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- Shiftlock toggle (your logic)
+-- ===== Shiftlock toggle =====
 local function setShiftLock(enabled)
     shiftLock = enabled
-
     if not humanoid then return end
-
     if enabled then
         humanoid.AutoRotate = false
         shiftBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -160,7 +210,7 @@ shiftBtn.Activated:Connect(function()
     setShiftLock(not shiftLock)
 end)
 
--- Main loop: shiftlock lerp + WASD movement
+-- ===== Main loop =====
 RS.RenderStepped:Connect(function()
     if not humanoid or not rootPart then return end
 
@@ -199,7 +249,7 @@ RS.RenderStepped:Connect(function()
     end
 end)
 
--- Hide default mobile controls when WASD is on
+-- ===== Hide default mobile controls =====
 local lastState = nil
 task.spawn(function()
     while true do
