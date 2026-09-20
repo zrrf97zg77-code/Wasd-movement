@@ -4,6 +4,7 @@ local RS = game:GetService("RunService")
 local cam = workspace.CurrentCamera
 
 if _G.WASDGui then pcall(function() _G.WASDGui:Destroy() end) end
+if _G.ShiftPart then pcall(function() _G.ShiftPart:Destroy() end) end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "WASDMobile"
@@ -72,14 +73,52 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
+-- ===== SHIFTLOCK via CameraSubject swap =====
+-- Create an invisible part that sits behind/beside the character.
+-- Point the camera at it. Now the native mobile camera drag follows it.
+-- This is how real mobile shiftlock works.
+
+local function createShiftPart()
+    local char = plr.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local part = Instance.new("Part")
+    part.Name = "ShiftLockSubject"
+    part.Size = Vector3.new(1, 1, 1)
+    part.Transparency = 1
+    part.CanCollide = false
+    part.CanQuery = false
+    part.CanTouch = false
+    part.Anchored = true
+    part.Parent = workspace
+    part.CFrame = root.CFrame
+    return part
+end
+
 local function applyShift()
-    local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
+
     if shiftLock then
-        hum.CameraOffset = Vector3.new(1.75, 0, 0)
+        local part = createShiftPart()
+        if part then
+            _G.ShiftPart = part
+            -- Point camera at the invisible part (native camera keeps control)
+            cam.CameraSubject = part
+            -- Also offset the humanoid so the character body appears offset
+            hum.CameraOffset = Vector3.new(0, 0, 0)
+        end
         shiftBtn.Text = "🔒"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
     else
+        if _G.ShiftPart then
+            pcall(function() _G.ShiftPart:Destroy() end)
+            _G.ShiftPart = nil
+        end
+        cam.CameraSubject = hum
         hum.CameraOffset = Vector3.new(0, 0, 0)
         shiftBtn.Text = "🔓"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
@@ -107,13 +146,24 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- ===== MOVEMENT (only ONE per-frame loop, no camera math) =====
+-- ===== MOVEMENT =====
 RS.RenderStepped:Connect(function()
-    if not wasdOn then return end
     local char = plr.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return end
+
+    -- Update shift part position each frame (this is what makes it stick)
+    if shiftLock and _G.ShiftPart then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            -- Position the part so camera looks from side: offset to the right of character
+            local offset = cam.CFrame.RightVector * -1.5
+            _G.ShiftPart.CFrame = CFrame.new(root.Position + offset, root.Position + offset + cam.CFrame.LookVector)
+        end
+    end
+
+    if not wasdOn then return end
 
     local mv = Vector3.zero
     if keys.W then mv = mv + Vector3.new(0,0,-1) end
@@ -134,24 +184,21 @@ RS.RenderStepped:Connect(function()
     end
 end)
 
--- ===== HIDE DEFAULT MOBILE CONTROLS (only when state changes) =====
-local lastWasdState = nil
-local function refreshTouchGui()
-    if lastWasdState == wasdOn then return end
-    lastWasdState = wasdOn
-    local pg = plr:FindFirstChild("PlayerGui")
-    if not pg then return end
-    local tg = pg:FindFirstChild("TouchGui")
-    if tg then
-        local cf = tg:FindFirstChild("TouchControlFrame")
-        if cf then cf.Visible = not wasdOn end
-    end
-end
-
--- Only check every 0.5s instead of every frame
+-- ===== HIDE DEFAULT MOBILE CONTROLS =====
+local lastState = nil
 task.spawn(function()
     while true do
-        refreshTouchGui()
+        if lastState ~= wasdOn then
+            lastState = wasdOn
+            local pg = plr:FindFirstChild("PlayerGui")
+            if pg then
+                local tg = pg:FindFirstChild("TouchGui")
+                if tg then
+                    local cf = tg:FindFirstChild("TouchControlFrame")
+                    if cf then cf.Visible = not wasdOn end
+                end
+            end
+        end
         task.wait(0.5)
     end
 end)
