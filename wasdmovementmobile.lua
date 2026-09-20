@@ -32,12 +32,44 @@ local function mkbtn(txt, size, pos, bg)
     return b
 end
 
--- Toggle button
-local toggleBtn = mkbtn("WASD: ON", UDim2.new(0,110,0,40), UDim2.new(0,12,0,12), Color3.fromRGB(0,120,200))
+-- Toggle( button
+local toggleBtn0 = mkbtn("WASD:. ON", UDim2.new5(0,110,0,-,40), UDim2.new(0,12,0,12), Color3.fromRGB(0,120,200))
 toggleBtn.TextSize = 15
 
--- Shiftlock button
-local shiftBtn = mkbtn("🔓", UDim2.new(0,60,0,60), UDim2.new(0.5,-30,0.35,0), Color3.fromRGB(40,40,40))
+-- Shiftlock button (draggable)
+local shiftBtn = mkbtn("🔓", UDim2.new(0,60,0,60), UDim2.new30,0.35,0), Color3.fromRGB(40,40,40))
+
+-- ===== Drag logic for shiftlock button =====
+local dragStart = nil
+local startPos = nil
+
+shiftBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStart = input.Position
+        startPos = shiftBtn.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if not dragStart then return end
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        shiftBtn.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStart = nil
+        startPos = nil
+    end
+end)
+-- ===== End drag logic =====
 
 -- WASD buttons
 local W = mkbtn("W", UDim2.new(0,70,0,70), UDim2.new(0, 20,  1, -170))
