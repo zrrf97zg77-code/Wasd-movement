@@ -39,21 +39,9 @@ local A = mkbtn("A", UDim2.new(0,70,0,70), UDim2.new(0, 100, 1, -170))
 local S = mkbtn("S", UDim2.new(0,70,0,70), UDim2.new(1, -170, 1, -170))
 local D = mkbtn("D", UDim2.new(0,70,0,70), UDim2.new(1, -90,  1, -170))
 
-local allBtns = {W, A, S, D, shiftBtn, toggleBtn}
 local keys = {W=false, A=false, S=false, D=false}
 local shiftLock = false
 local wasdOn = true
-
-local function isOnOurButtons(pos)
-    for _, b in ipairs(allBtns) do
-        local tl = b.AbsolutePosition
-        local br = tl + b.AbsoluteSize
-        if pos.X >= tl.X and pos.X <= br.X and pos.Y >= tl.Y and pos.Y <= br.Y then
-            return true
-        end
-    end
-    return false
-end
 
 local function bind(btn, key)
     btn.MouseButton1Down:Connect(function()
@@ -84,20 +72,15 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
--- ===== SHIFTLOCK (real, minimal) =====
 local function applyShift()
-    local char = plr.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-
     if shiftLock then
         hum.CameraOffset = Vector3.new(1.75, 0, 0)
-        hum.AutoRotate = true
         shiftBtn.Text = "🔒"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
     else
         hum.CameraOffset = Vector3.new(0, 0, 0)
-        hum.AutoRotate = true
         shiftBtn.Text = "🔓"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
     end
@@ -124,116 +107,52 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- ===== MOVEMENT =====
+-- ===== MOVEMENT (only ONE per-frame loop, no camera math) =====
 RS.RenderStepped:Connect(function()
+    if not wasdOn then return end
     local char = plr.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return end
 
-    if wasdOn then
-        local mv = Vector3.zero
-        if keys.W then mv = mv + Vector3.new(0,0,-1) end
-        if keys.S then mv = mv + Vector3.new(0,0, 1) end
-        if keys.A then mv = mv + Vector3.new(-1,0,0) end
-        if keys.D then mv = mv + Vector3.new( 1,0,0) end
+    local mv = Vector3.zero
+    if keys.W then mv = mv + Vector3.new(0,0,-1) end
+    if keys.S then mv = mv + Vector3.new(0,0, 1) end
+    if keys.A then mv = mv + Vector3.new(-1,0,0) end
+    if keys.D then mv = mv + Vector3.new( 1,0,0) end
 
-        if mv.Magnitude > 0 then
-            mv = mv.Unit
-            local cf = cam.CFrame
-            local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
-            local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
-            if look.Magnitude > 0 then look = look.Unit end
-            if right.Magnitude > 0 then right = right.Unit end
-            hum:Move((look * -mv.Z) + (right * mv.X), false)
-        else
-            hum:Move(Vector3.zero, false)
-        end
+    if mv.Magnitude > 0 then
+        mv = mv.Unit
+        local cf = cam.CFrame
+        local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+        local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
+        if look.Magnitude > 0.01 then look = look.Unit else look = Vector3.new(0,0,-1) end
+        if right.Magnitude > 0.01 then right = right.Unit else right = Vector3.new(1,0,0) end
+        hum:Move((look * -mv.Z) + (right * mv.X), false)
+    else
+        hum:Move(Vector3.zero, false)
     end
 end)
 
--- ===== TOUCH CAMERA ROTATION (smooth, native-feeling) =====
--- We use a velocity/decay model instead of direct CFrame override.
--- This is what makes it feel like real Roblox camera drag.
-
-local activeDrags = {}
-local uiTouches = {}
-
--- Camera rotation velocity (radians per frame) for smoothness
-local yawVel = 0
-local pitchVel = 0
-
-UIS.InputBegan:Connect(function(input, gp)
-    if input.UserInputType ~= Enum.UserInputType.Touch then return end
-
-    if isOnOurButtons(input.Position) then
-        uiTouches[input] = true
-        return
-    end
-
-    if gp then return end
-    if not shiftLock then return end
-    activeDrags[input] = {last = input.Position, delta = Vector2.zero}
-end)
-
-UIS.InputChanged:Connect(function(input)
-    if input.UserInputType ~= Enum.UserInputType.Touch then return end
-    if uiTouches[input] then return end
-    local d = activeDrags[input]
-    if not d then return end
-    d.delta = input.Position - d.last
-    d.last = input.Position
-end)
-
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        activeDrags[input] = nil
-        uiTouches[input] = nil
-    end
-end)
-
--- Apply camera rotation smoothly using velocity decay
-RS.RenderStepped:Connect(function(dt)
-    if not shiftLock then return end
-
-    local totalDelta = Vector2.zero
-    for _, d in pairs(activeDrags) do
-        totalDelta = totalDelta + d.delta
-        d.delta = Vector2.zero
-    end
-
-    -- Convert to camera velocity (scaled by 1/dt for consistent speed)
-    local sens = 0.006
-    yawVel = -totalDelta.X * sens * 60
-    pitchVel = -totalDelta.Y * sens * 60
-
-    -- Apply to camera via CFrame rotation using Roblox's own camera math
-    -- (rotate around camera position, not set absolute lookAt)
-    local rotX = CFrame.Angles(0, yawVel * dt, 0)
-    local rotY = CFrame.Angles(pitchVel * dt, 0, 0)
-    
-    -- Rotate in camera-local space for pitch, world space for yaw
-    cam.CFrame = cam.CFrame * CFrame.Angles(0, 0, 0) -- no-op, keep Roblox cam
-    cam.CFrame = CFrame.new(cam.CFrame.Position) * cam.CFrame.Rotation * CFrame.Angles(pitchVel * dt, yawVel * dt, 0)
-
-    -- Clamp pitch so camera can't flip
-    local look = cam.CFrame.LookVector
-    local curPitch = math.asin(math.clamp(look.Y, -1, 1))
-    if curPitch > math.rad(80) then
-        cam.CFrame = CFrame.new(cam.CFrame.Position) * (cam.CFrame.Rotation * CFrame.Angles(math.rad(-5), 0, 0))
-    elseif curPitch < math.rad(-80) then
-        cam.CFrame = CFrame.new(cam.CFrame.Position) * (cam.CFrame.Rotation * CFrame.Angles(math.rad(5), 0, 0))
-    end
-end)
-
--- ===== HIDE DEFAULT MOBILE CONTROLS =====
-RS.Heartbeat:Connect(function()
+-- ===== HIDE DEFAULT MOBILE CONTROLS (only when state changes) =====
+local lastWasdState = nil
+local function refreshTouchGui()
+    if lastWasdState == wasdOn then return end
+    lastWasdState = wasdOn
     local pg = plr:FindFirstChild("PlayerGui")
     if not pg then return end
     local tg = pg:FindFirstChild("TouchGui")
     if tg then
         local cf = tg:FindFirstChild("TouchControlFrame")
         if cf then cf.Visible = not wasdOn end
+    end
+end
+
+-- Only check every 0.5s instead of every frame
+task.spawn(function()
+    while true do
+        refreshTouchGui()
+        task.wait(0.5)
     end
 end)
 
