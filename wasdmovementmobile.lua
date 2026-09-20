@@ -44,7 +44,6 @@ local keys = {W=false, A=false, S=false, D=false}
 local shiftLock = false
 local wasdOn = true
 
--- Check if a screen position is on any of our buttons
 local function isOnOurButtons(pos)
     for _, b in ipairs(allBtns) do
         local tl = b.AbsolutePosition
@@ -56,7 +55,6 @@ local function isOnOurButtons(pos)
     return false
 end
 
--- ===== WASD BUTTON BINDING =====
 local function bind(btn, key)
     btn.MouseButton1Down:Connect(function()
         keys[key] = true
@@ -86,22 +84,20 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
--- ===== SHIFTLOCK =====
+-- ===== REAL SHIFTLOCK =====
 local function applyShift()
     local char = plr.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.AutoRotate = not shiftLock
-        if shiftLock then
-            hum.CameraOffset = Vector3.new(1.75, 0, 0)
-        else
-            hum.CameraOffset = Vector3.new(0, 0, 0)
-        end
-    end
+    if not hum then return end
+
     if shiftLock then
+        hum.CameraOffset = Vector3.new(1.75, 0, 0)
+        hum.AutoRotate = true
         shiftBtn.Text = "🔒"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
     else
+        hum.CameraOffset = Vector3.new(0, 0, 0)
+        hum.AutoRotate = true
         shiftBtn.Text = "🔓"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
     end
@@ -110,6 +106,12 @@ end
 shiftBtn.Activated:Connect(function()
     shiftLock = not shiftLock
     applyShift()
+    if shiftLock then
+        -- seed camera yaw/pitch from current camera so it doesn't snap
+        local look = cam.CFrame.LookVector
+        yaw = math.atan2(-look.X, -look.Z)
+        pitch = math.asin(math.clamp(look.Y, -1, 1))
+    end
 end)
 
 toggleBtn.Activated:Connect(function()
@@ -128,13 +130,42 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- ===== MOVEMENT + INSTANT SHIFTLOCK =====
+-- ===== CAMERA CONTROL FOR SHIFTLOCK =====
+yaw = 0
+pitch = 0
+
+local function updateCamera()
+    local char = plr.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+
+    local dir = Vector3.new(
+        -math.sin(yaw) * math.cos(pitch),
+         math.sin(pitch),
+        -math.cos(yaw) * math.cos(pitch)
+    )
+    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + dir)
+
+    -- Y-axis-only rotation (never tilts X/Z)
+    local flatDir = Vector3.new(dir.X, 0, dir.Z)
+    if flatDir.Magnitude > 0.01 then
+        flatDir = flatDir.Unit
+        local currentYaw = math.atan2(-root.CFrame.LookVector.X, -root.CFrame.LookVector.Z)
+        local targetYaw = math.atan2(-flatDir.X, -flatDir.Z)
+        local diff = math.atan2(math.sin(targetYaw - currentYaw), math.cos(targetYaw - currentYaw))
+        local newYaw = currentYaw + diff * 0.3
+        root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, newYaw, 0)
+    end
+end
+
+-- ===== MAIN LOOP =====
 RS.RenderStepped:Connect(function()
     local char = plr.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not hum or not root or hum.Health <= 0 then return end
+    if not hum or hum.Health <= 0 then return end
 
     if wasdOn then
         local mv = Vector3.zero
@@ -156,50 +187,45 @@ RS.RenderStepped:Connect(function()
         end
     end
 
-    -- Instant shiftlock: snap character to face camera every frame
     if shiftLock then
-        local camLook = cam.CFrame.LookVector
-        local flat = Vector3.new(camLook.X, 0, camLook.Z)
-        if flat.Magnitude > 0.01 then
-            flat = flat.Unit
-            root.CFrame = CFrame.new(root.Position, root.Position + flat)
-        end
+        updateCamera()
     end
 end)
 
--- ===== CAMERA DRAG (multi-touch safe) =====
-local activeDrags = {} -- [input] = lastPosition
+-- ===== TOUCH DRAG (multi-touch safe, tagged touches) =====
+local activeDrags = {}
+local uiTouches   = {}
 
 UIS.InputBegan:Connect(function(input, gp)
+    if input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+    -- Tag every touch at the moment it starts
+    if isOnOurButtons(input.Position) then
+        uiTouches[input] = true
+        return
+    end
+
     if gp then return end
     if not shiftLock then return end
-    if input.UserInputType ~= Enum.UserInputType.Touch then return end
-    if isOnOurButtons(input.Position) then return end
     activeDrags[input] = input.Position
 end)
 
 UIS.InputChanged:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.Touch then return end
+    if uiTouches[input] then return end
     local last = activeDrags[input]
     if not last then return end
     local d = input.Position - last
     activeDrags[input] = input.Position
 
-    local look = cam.CFrame.LookVector
-    local curYaw = math.atan2(-look.X, -look.Z)
-    local curPitch = math.asin(math.clamp(look.Y, -1, 1))
-    local newYaw = curYaw - d.X * 0.006
-    local newPitch = math.clamp(curPitch - d.Y * 0.006, math.rad(-80), math.rad(80))
-    local dir = Vector3.new(
-        -math.sin(newYaw) * math.cos(newPitch),
-         math.sin(newPitch),
-        -math.cos(newYaw) * math.cos(newPitch))
-    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + dir)
+    yaw = yaw - d.X * 0.006
+    pitch = math.clamp(pitch - d.Y * 0.006, math.rad(-80), math.rad(80))
 end)
 
 UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch then
         activeDrags[input] = nil
+        uiTouches[input] = nil
     end
 end)
 
@@ -216,5 +242,10 @@ end)
 
 plr.CharacterAdded:Connect(function(char)
     task.wait(0.5)
-    if shiftLock then applyShift() end
+    if shiftLock then
+        applyShift()
+        local look = cam.CFrame.LookVector
+        yaw = math.atan2(-look.X, -look.Z)
+        pitch = math.asin(math.clamp(look.Y, -1, 1))
+    end
 end)
