@@ -3,10 +3,16 @@ local UIS = game:GetService("UserInputService")
 local RS = game:GetService("RunService")
 local cam = workspace.CurrentCamera
 
+-- Cleanup old instance on re-execute
+if _G.WASDMobileGui then
+    pcall(function() _G.WASDMobileGui:Destroy() end)
+end
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "WASDMobile"
 gui.ResetOnSpawn = false
 gui.Parent = plr:WaitForChild("PlayerGui")
+_G.WASDMobileGui = gui
 
 local function mkbtn(txt, size, pos, bg)
     local b = Instance.new("TextButton")
@@ -43,6 +49,7 @@ local keys = {W=false, A=false, S=false, D=false}
 local shiftLock = false
 local wasdOn = true
 
+-- WASD button binding (hold-to-move)
 local function bind(btn, key)
     local function on()
         keys[key] = true
@@ -52,14 +59,20 @@ local function bind(btn, key)
         keys[key] = false
         btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
     end
+
     btn.MouseButton1Down:Connect(on)
     btn.MouseButton1Up:Connect(off)
     btn.MouseLeave:Connect(off)
+
     btn.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.Touch then
             on()
-            i.Changed:Connect(function()
-                if i.UserInputState == Enum.UserInputState.End then off() end
+            local conn
+            conn = i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then
+                    off()
+                    conn:Disconnect()
+                end
             end)
         end
     end)
@@ -86,10 +99,7 @@ local function toggleShift()
     applyShift()
 end
 
-shiftBtn.MouseButton1Click:Connect(toggleShift)
-shiftBtn.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch then toggleShift() end
-end)
+shiftBtn.Activated:Connect(toggleShift)
 
 -- WASD toggle
 local function toggleWASD()
@@ -108,48 +118,54 @@ local function toggleWASD()
     end
 end
 
-toggleBtn.MouseButton1Click:Connect(toggleWASD)
-toggleBtn.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch then toggleWASD() end
-end)
+toggleBtn.Activated:Connect(toggleWASD)
 
--- Movement
+-- Movement + always-on shiftlock
 RS.RenderStepped:Connect(function()
-    if not wasdOn then return end
     local char = plr.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
     if not hum or not root or hum.Health <= 0 then return end
 
-    local mv = Vector3.zero
-    if keys.W then mv = mv + Vector3.new(0,0,-1) end
-    if keys.S then mv = mv + Vector3.new(0,0, 1) end
-    if keys.A then mv = mv + Vector3.new(-1,0,0) end
-    if keys.D then mv = mv + Vector3.new( 1,0,0) end
+    -- WASD movement (only if WASD mode on)
+    if wasdOn then
+        local mv = Vector3.zero
+        if keys.W then mv = mv + Vector3.new(0,0,-1) end
+        if keys.S then mv = mv + Vector3.new(0,0, 1) end
+        if keys.A then mv = mv + Vector3.new(-1,0,0) end
+        if keys.D then mv = mv + Vector3.new( 1,0,0) end
 
-    if mv.Magnitude > 0 then
-        mv = mv.Unit
-        local cf = cam.CFrame
-        local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
-        local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
-        if look.Magnitude > 0 then look = look.Unit end
-        if right.Magnitude > 0 then right = right.Unit end
-        local world = (look * -mv.Z) + (right * mv.X)
-        hum:Move(world, false)
-
-        if shiftLock then
-            local target = CFrame.lookAt(root.Position, root.Position + world)
-            root.CFrame = root.CFrame:Lerp(
-                CFrame.new(root.Position) * (target - target.Position), 0.35)
+        if mv.Magnitude > 0 then
+            mv = mv.Unit
+            local cf = cam.CFrame
+            local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+            local right = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
+            if look.Magnitude > 0 then look = look.Unit end
+            if right.Magnitude > 0 then right = right.Unit end
+            local world = (look * -mv.Z) + (right * mv.X)
+            hum:Move(world, false)
+        else
+            hum:Move(Vector3.zero, false)
         end
-    else
-        hum:Move(Vector3.zero, false)
+    end
+
+    -- Shiftlock always keeps character facing camera direction (even when idle)
+    if shiftLock then
+        local camLook = cam.CFrame.LookVector
+        local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+        if flatLook.Magnitude > 0.01 then
+            flatLook = flatLook.Unit
+            local target = CFrame.lookAt(root.Position, root.Position + flatLook)
+            root.CFrame = root.CFrame:Lerp(
+                CFrame.new(root.Position) * (target - target.Position), 0.3)
+        end
     end
 end)
 
 -- Touch camera drag for shiftlock
 local lastTouch, dragging = nil, false
+
 UIS.TouchStarted:Connect(function(input, gp)
     if gp or not shiftLock then return end
     local p = input.Position
