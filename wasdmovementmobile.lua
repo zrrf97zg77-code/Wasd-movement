@@ -84,7 +84,7 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
--- ===== REAL SHIFTLOCK =====
+-- ===== SHIFTLOCK (real, minimal) =====
 local function applyShift()
     local char = plr.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -106,12 +106,6 @@ end
 shiftBtn.Activated:Connect(function()
     shiftLock = not shiftLock
     applyShift()
-    if shiftLock then
-        -- seed camera yaw/pitch from current camera so it doesn't snap
-        local look = cam.CFrame.LookVector
-        yaw = math.atan2(-look.X, -look.Z)
-        pitch = math.asin(math.clamp(look.Y, -1, 1))
-    end
 end)
 
 toggleBtn.Activated:Connect(function()
@@ -130,37 +124,7 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
--- ===== CAMERA CONTROL FOR SHIFTLOCK =====
-yaw = 0
-pitch = 0
-
-local function updateCamera()
-    local char = plr.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not root or not hum then return end
-
-    local dir = Vector3.new(
-        -math.sin(yaw) * math.cos(pitch),
-         math.sin(pitch),
-        -math.cos(yaw) * math.cos(pitch)
-    )
-    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + dir)
-
-    -- Y-axis-only rotation (never tilts X/Z)
-    local flatDir = Vector3.new(dir.X, 0, dir.Z)
-    if flatDir.Magnitude > 0.01 then
-        flatDir = flatDir.Unit
-        local currentYaw = math.atan2(-root.CFrame.LookVector.X, -root.CFrame.LookVector.Z)
-        local targetYaw = math.atan2(-flatDir.X, -flatDir.Z)
-        local diff = math.atan2(math.sin(targetYaw - currentYaw), math.cos(targetYaw - currentYaw))
-        local newYaw = currentYaw + diff * 0.3
-        root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, newYaw, 0)
-    end
-end
-
--- ===== MAIN LOOP =====
+-- ===== MOVEMENT =====
 RS.RenderStepped:Connect(function()
     local char = plr.Character
     if not char then return end
@@ -186,20 +150,22 @@ RS.RenderStepped:Connect(function()
             hum:Move(Vector3.zero, false)
         end
     end
-
-    if shiftLock then
-        updateCamera()
-    end
 end)
 
--- ===== TOUCH DRAG (multi-touch safe, tagged touches) =====
+-- ===== TOUCH CAMERA ROTATION (smooth, native-feeling) =====
+-- We use a velocity/decay model instead of direct CFrame override.
+-- This is what makes it feel like real Roblox camera drag.
+
 local activeDrags = {}
-local uiTouches   = {}
+local uiTouches = {}
+
+-- Camera rotation velocity (radians per frame) for smoothness
+local yawVel = 0
+local pitchVel = 0
 
 UIS.InputBegan:Connect(function(input, gp)
     if input.UserInputType ~= Enum.UserInputType.Touch then return end
 
-    -- Tag every touch at the moment it starts
     if isOnOurButtons(input.Position) then
         uiTouches[input] = true
         return
@@ -207,25 +173,56 @@ UIS.InputBegan:Connect(function(input, gp)
 
     if gp then return end
     if not shiftLock then return end
-    activeDrags[input] = input.Position
+    activeDrags[input] = {last = input.Position, delta = Vector2.zero}
 end)
 
 UIS.InputChanged:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.Touch then return end
     if uiTouches[input] then return end
-    local last = activeDrags[input]
-    if not last then return end
-    local d = input.Position - last
-    activeDrags[input] = input.Position
-
-    yaw = yaw - d.X * 0.006
-    pitch = math.clamp(pitch - d.Y * 0.006, math.rad(-80), math.rad(80))
+    local d = activeDrags[input]
+    if not d then return end
+    d.delta = input.Position - d.last
+    d.last = input.Position
 end)
 
 UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch then
         activeDrags[input] = nil
         uiTouches[input] = nil
+    end
+end)
+
+-- Apply camera rotation smoothly using velocity decay
+RS.RenderStepped:Connect(function(dt)
+    if not shiftLock then return end
+
+    local totalDelta = Vector2.zero
+    for _, d in pairs(activeDrags) do
+        totalDelta = totalDelta + d.delta
+        d.delta = Vector2.zero
+    end
+
+    -- Convert to camera velocity (scaled by 1/dt for consistent speed)
+    local sens = 0.006
+    yawVel = -totalDelta.X * sens * 60
+    pitchVel = -totalDelta.Y * sens * 60
+
+    -- Apply to camera via CFrame rotation using Roblox's own camera math
+    -- (rotate around camera position, not set absolute lookAt)
+    local rotX = CFrame.Angles(0, yawVel * dt, 0)
+    local rotY = CFrame.Angles(pitchVel * dt, 0, 0)
+    
+    -- Rotate in camera-local space for pitch, world space for yaw
+    cam.CFrame = cam.CFrame * CFrame.Angles(0, 0, 0) -- no-op, keep Roblox cam
+    cam.CFrame = CFrame.new(cam.CFrame.Position) * cam.CFrame.Rotation * CFrame.Angles(pitchVel * dt, yawVel * dt, 0)
+
+    -- Clamp pitch so camera can't flip
+    local look = cam.CFrame.LookVector
+    local curPitch = math.asin(math.clamp(look.Y, -1, 1))
+    if curPitch > math.rad(80) then
+        cam.CFrame = CFrame.new(cam.CFrame.Position) * (cam.CFrame.Rotation * CFrame.Angles(math.rad(-5), 0, 0))
+    elseif curPitch < math.rad(-80) then
+        cam.CFrame = CFrame.new(cam.CFrame.Position) * (cam.CFrame.Rotation * CFrame.Angles(math.rad(5), 0, 0))
     end
 end)
 
@@ -242,10 +239,5 @@ end)
 
 plr.CharacterAdded:Connect(function(char)
     task.wait(0.5)
-    if shiftLock then
-        applyShift()
-        local look = cam.CFrame.LookVector
-        yaw = math.atan2(-look.X, -look.Z)
-        pitch = math.asin(math.clamp(look.Y, -1, 1))
-    end
+    if shiftLock then applyShift() end
 end)
