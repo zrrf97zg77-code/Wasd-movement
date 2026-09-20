@@ -3,7 +3,6 @@ local UIS = game:GetService("UserInputService")
 local RS = game:GetService("RunService")
 local cam = workspace.CurrentCamera
 
--- Remove old GUI if re-executed
 if _G.WASDGui then pcall(function() _G.WASDGui:Destroy() end) end
 
 local gui = Instance.new("ScreenGui")
@@ -40,10 +39,24 @@ local A = mkbtn("A", UDim2.new(0,70,0,70), UDim2.new(0, 100, 1, -170))
 local S = mkbtn("S", UDim2.new(0,70,0,70), UDim2.new(1, -170, 1, -170))
 local D = mkbtn("D", UDim2.new(0,70,0,70), UDim2.new(1, -90,  1, -170))
 
+local allBtns = {W, A, S, D, shiftBtn, toggleBtn}
 local keys = {W=false, A=false, S=false, D=false}
 local shiftLock = false
 local wasdOn = true
 
+-- Check if a screen position is on any of our buttons
+local function isOnOurButtons(pos)
+    for _, b in ipairs(allBtns) do
+        local tl = b.AbsolutePosition
+        local br = tl + b.AbsoluteSize
+        if pos.X >= tl.X and pos.X <= br.X and pos.Y >= tl.Y and pos.Y <= br.Y then
+            return true
+        end
+    end
+    return false
+end
+
+-- ===== WASD BUTTON BINDING =====
 local function bind(btn, key)
     btn.MouseButton1Down:Connect(function()
         keys[key] = true
@@ -73,16 +86,24 @@ end
 
 bind(W,"W") bind(A,"A") bind(S,"S") bind(D,"D")
 
+-- ===== SHIFTLOCK =====
 local function applyShift()
-    local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.AutoRotate = not shiftLock
+        if shiftLock then
+            hum.CameraOffset = Vector3.new(1.75, 0, 0)
+        else
+            hum.CameraOffset = Vector3.new(0, 0, 0)
+        end
+    end
     if shiftLock then
         shiftBtn.Text = "🔒"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(0,150,0)
-        if hum then hum.CameraOffset = Vector3.new(1.75, 0, 0) end
     else
         shiftBtn.Text = "🔓"
         shiftBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        if hum then hum.CameraOffset = Vector3.new(0, 0, 0) end
     end
 end
 
@@ -107,6 +128,7 @@ toggleBtn.Activated:Connect(function()
     end
 end)
 
+-- ===== MOVEMENT + INSTANT SHIFTLOCK =====
 RS.RenderStepped:Connect(function()
     local char = plr.Character
     if not char then return end
@@ -134,35 +156,35 @@ RS.RenderStepped:Connect(function()
         end
     end
 
+    -- Instant shiftlock: snap character to face camera every frame
     if shiftLock then
         local camLook = cam.CFrame.LookVector
         local flat = Vector3.new(camLook.X, 0, camLook.Z)
         if flat.Magnitude > 0.01 then
             flat = flat.Unit
-            local target = CFrame.lookAt(root.Position, root.Position + flat)
-            root.CFrame = root.CFrame:Lerp(
-                CFrame.new(root.Position) * (target - target.Position), 0.3)
+            root.CFrame = CFrame.new(root.Position, root.Position + flat)
         end
     end
 end)
 
-local lastTouch, dragging = nil, false
-UIS.TouchStarted:Connect(function(input, gp)
-    if gp or not shiftLock then return end
-    local p = input.Position
-    for _, b in ipairs({W,A,S,D,shiftBtn,toggleBtn}) do
-        local tl = b.AbsolutePosition
-        local br = tl + b.AbsoluteSize
-        if p.X >= tl.X and p.X <= br.X and p.Y >= tl.Y and p.Y <= br.Y then return end
-    end
-    lastTouch = p
-    dragging = true
+-- ===== CAMERA DRAG (multi-touch safe) =====
+local activeDrags = {} -- [input] = lastPosition
+
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not shiftLock then return end
+    if input.UserInputType ~= Enum.UserInputType.Touch then return end
+    if isOnOurButtons(input.Position) then return end
+    activeDrags[input] = input.Position
 end)
 
-UIS.TouchMoved:Connect(function(input)
-    if not dragging or not lastTouch then return end
-    local d = input.Position - lastTouch
-    lastTouch = input.Position
+UIS.InputChanged:Connect(function(input)
+    if input.UserInputType ~= Enum.UserInputType.Touch then return end
+    local last = activeDrags[input]
+    if not last then return end
+    local d = input.Position - last
+    activeDrags[input] = input.Position
+
     local look = cam.CFrame.LookVector
     local curYaw = math.atan2(-look.X, -look.Z)
     local curPitch = math.asin(math.clamp(look.Y, -1, 1))
@@ -175,11 +197,13 @@ UIS.TouchMoved:Connect(function(input)
     cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + dir)
 end)
 
-UIS.TouchEnded:Connect(function()
-    dragging = false
-    lastTouch = nil
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        activeDrags[input] = nil
+    end
 end)
 
+-- ===== HIDE DEFAULT MOBILE CONTROLS =====
 RS.Heartbeat:Connect(function()
     local pg = plr:FindFirstChild("PlayerGui")
     if not pg then return end
@@ -190,7 +214,7 @@ RS.Heartbeat:Connect(function()
     end
 end)
 
-plr.CharacterAdded:Connect(function()
+plr.CharacterAdded:Connect(function(char)
     task.wait(0.5)
     if shiftLock then applyShift() end
 end)
